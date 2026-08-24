@@ -12,7 +12,7 @@ type Comment = {
   createdAt: string;
 };
 
-const ZERO_FEEDBACK_URL = "ZERO_FEEDBACK_URL_PLACEHOLDER";
+const ZERO_FEEDBACK_URL = "https://cdn.withzero.xyz/EAOjJxtl/pinpoint-feedback/index.html";
 
 const seedComments: Comment[] = [
   {
