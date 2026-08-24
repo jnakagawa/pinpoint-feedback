@@ -110,6 +110,7 @@ export default function Home() {
 
   useEffect(() => {
     const reviewUrl = normalizeReviewUrl(activeAddress) || DEFAULT_REVIEW_URL;
+    let current = true;
     fetch(`/api/comments?url=${encodeURIComponent(reviewUrl)}`)
       .then(async (response) => {
         const data = await response.json();
@@ -117,12 +118,17 @@ export default function Home() {
         return data;
       })
       .then((data: { comments?: Comment[] }) => {
+        if (!current) return;
         setComments(data.comments || []);
       })
       .catch((error: Error) => {
+        if (!current) return;
         setComments([]);
         setToast(error.message);
       });
+    return () => {
+      current = false;
+    };
   }, [activeAddress]);
 
   useEffect(() => {
