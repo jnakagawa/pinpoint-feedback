@@ -12,29 +12,26 @@ type Comment = {
   createdAt: string;
 };
 
+type SnapshotMeta = {
+  pageTitle: string;
+  pageWidth: number;
+  pageHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  scrollX: number;
+  scrollY: number;
+  capturedAt: string;
+};
+
+type DraftPoint = {
+  x: number;
+  y: number;
+  viewX: number;
+  viewY: number;
+};
+
 const PUBLIC_SITE_URL = "https://pinpoint-feedback.transqualia.chatgpt.site";
 const DEFAULT_REVIEW_URL = "https://kanso.studio/";
-
-const seedComments: Comment[] = [
-  {
-    id: 1,
-    author: "Alex Morgan",
-    body: "Can we make this headline feel a little more specific to the studio?",
-    x: 53,
-    y: 38,
-    status: "open",
-    createdAt: "2026-08-24T19:00:00.000Z",
-  },
-  {
-    id: 2,
-    author: "Sam Lee",
-    body: "This image treatment is great. Could we carry the soft orange into the footer?",
-    x: 86,
-    y: 74,
-    status: "open",
-    createdAt: "2026-08-24T18:56:00.000Z",
-  },
-];
 
 function formatTime(value: string) {
   const elapsed = Math.max(0, Date.now() - new Date(value).getTime());
@@ -44,6 +41,28 @@ function formatTime(value: string) {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours} hr`;
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
+}
+
+function numericHeader(response: Response, name: string) {
+  const value = Number(response.headers.get(name));
+  return Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function titleHeader(response: Response) {
+  const value = response.headers.get("x-page-title") || "";
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function commentInSnapshot(comment: Comment, snapshot: SnapshotMeta) {
+  if (!snapshot.pageWidth || !snapshot.pageHeight || !snapshot.viewportWidth || !snapshot.viewportHeight) return null;
+  const x = (((comment.x / 100) * snapshot.pageWidth - snapshot.scrollX) / snapshot.viewportWidth) * 100;
+  const y = (((comment.y / 100) * snapshot.pageHeight - snapshot.scrollY) / snapshot.viewportHeight) * 100;
+  if (x < 0 || x > 100 || y < 0 || y > 100) return null;
+  return { x, y };
 }
 
 function normalizeReviewUrl(value: string) {
@@ -58,11 +77,11 @@ function normalizeReviewUrl(value: string) {
 }
 
 export default function Home() {
-  const [comments, setComments] = useState<Comment[]>(seedComments);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [mode, setMode] = useState<"comment" | "navigate">("comment");
   const [filter, setFilter] = useState<"open" | "resolved">("open");
-  const [selectedId, setSelectedId] = useState<number | null>(1);
-  const [draftPoint, setDraftPoint] = useState<{ x: number; y: number } | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [draftPoint, setDraftPoint] = useState<DraftPoint | null>(null);
   const [author, setAuthor] = useState("");
   const [body, setBody] = useState("");
   const [address, setAddress] = useState(DEFAULT_REVIEW_URL);
@@ -71,6 +90,10 @@ export default function Home() {
   const [shareOpen, setShareOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
+  const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
+  const [snapshotMeta, setSnapshotMeta] = useState<SnapshotMeta | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(true);
+  const [snapshotError, setSnapshotError] = useState("");
   const canvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -103,6 +126,60 @@ export default function Home() {
   }, [activeAddress]);
 
   useEffect(() => {
+    const reviewUrl = normalizeReviewUrl(activeAddress) || DEFAULT_REVIEW_URL;
+    let objectUrl = "";
+    let current = true;
+    const resetTimer = window.setTimeout(() => {
+      if (!current) return;
+      setSnapshotLoading(true);
+      setSnapshotError("");
+      setSnapshotUrl(null);
+      setSnapshotMeta(null);
+    }, 0);
+
+    fetch(`/api/snapshot?url=${encodeURIComponent(reviewUrl)}`)
+      .then(async (response) => {
+        if (!response.ok) {
+          const error = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(error.error || "Unable to open this page capture");
+        }
+        const blob = await response.blob();
+        return {
+          blob,
+          meta: {
+            pageTitle: titleHeader(response),
+            pageWidth: numericHeader(response, "x-page-width"),
+            pageHeight: numericHeader(response, "x-page-height"),
+            viewportWidth: numericHeader(response, "x-viewport-width"),
+            viewportHeight: numericHeader(response, "x-viewport-height"),
+            scrollX: numericHeader(response, "x-scroll-x"),
+            scrollY: numericHeader(response, "x-scroll-y"),
+            capturedAt: response.headers.get("x-captured-at") || "",
+          } satisfies SnapshotMeta,
+        };
+      })
+      .then(({ blob, meta }) => {
+        if (!current) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSnapshotUrl(objectUrl);
+        setSnapshotMeta(meta);
+      })
+      .catch((error: Error) => {
+        if (!current) return;
+        setSnapshotError(error.message);
+      })
+      .finally(() => {
+        if (current) setSnapshotLoading(false);
+      });
+
+    return () => {
+      current = false;
+      window.clearTimeout(resetTimer);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [activeAddress]);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(""), 2200);
     return () => window.clearTimeout(timer);
@@ -114,16 +191,28 @@ export default function Home() {
   );
   const openCount = comments.filter((comment) => comment.status === "open").length;
 
-  function placeComment(event: MouseEvent<HTMLDivElement>) {
+  function beginCommentAt(viewX: number, viewY: number) {
     if (mode !== "comment") return;
+    if (!snapshotUrl || !snapshotMeta || !snapshotMeta.pageWidth || !snapshotMeta.pageHeight || !snapshotMeta.viewportWidth || !snapshotMeta.viewportHeight) {
+      setToast("Share a page capture from the Pinpoint extension before adding feedback here");
+      return;
+    }
+    const safeViewX = Math.max(3, Math.min(97, viewX));
+    const safeViewY = Math.max(4, Math.min(96, viewY));
+    const x = ((snapshotMeta.scrollX + (safeViewX / 100) * snapshotMeta.viewportWidth) / snapshotMeta.pageWidth) * 100;
+    const y = ((snapshotMeta.scrollY + (safeViewY / 100) * snapshotMeta.viewportHeight) / snapshotMeta.pageHeight) * 100;
+    setDraftPoint({ x, y, viewX: safeViewX, viewY: safeViewY });
+    setSelectedId(null);
+    window.setTimeout(() => canvasRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus(), 20);
+  }
+
+  function placeComment(event: MouseEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement;
     if (target.closest("button, input, textarea, form, a")) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.max(3, Math.min(97, ((event.clientX - rect.left) / rect.width) * 100));
-    const y = Math.max(4, Math.min(96, ((event.clientY - rect.top) / rect.height) * 100));
-    setDraftPoint({ x, y });
-    setSelectedId(null);
-    window.setTimeout(() => canvasRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus(), 20);
+    const viewX = Math.max(3, Math.min(97, ((event.clientX - rect.left) / rect.width) * 100));
+    const viewY = Math.max(4, Math.min(96, ((event.clientY - rect.top) / rect.height) * 100));
+    beginCommentAt(viewX, viewY);
   }
 
   async function submitComment(event: FormEvent) {
@@ -220,8 +309,8 @@ export default function Home() {
           <span>pinpoint</span>
         </button>
         <div className="review-title">
-          <strong>Kanso Studio</strong>
-          <span>Homepage review</span>
+          <strong>{snapshotMeta?.pageTitle || displayHost}</strong>
+          <span>Website review</span>
         </div>
         <div className="topbar-actions">
           <span className="saved-state"><i /> {saving ? "Saving…" : "Saved"}</span>
@@ -254,7 +343,7 @@ export default function Home() {
         </nav>
 
         <div className="canvas-wrap">
-          <div className="mode-pill"><span>●</span>{mode === "comment" ? "Click anywhere to comment" : "Navigate mode"}</div>
+          <div className="mode-pill"><span>●</span>{snapshotLoading ? "Loading page capture…" : snapshotUrl ? (mode === "comment" ? "Click the captured page to comment" : "Navigate mode") : "No shared page capture"}</div>
           <article className="browser-frame" aria-label="Website under review">
             <div className="browser-bar">
               <div className="traffic"><i /><i /><i /></div>
@@ -265,44 +354,57 @@ export default function Home() {
               </form>
               <a className="open-icon" href={activeAddress} target="_blank" rel="noreferrer" aria-label="Open original website">↗</a>
             </div>
-            <div className={`sample-site ${mode === "comment" ? "comment-cursor" : ""}`} onClick={placeComment} ref={canvasRef}>
-              <nav className="sample-nav">
-                <span className="sample-logo">KANSO</span>
-                <div><span>Studio</span><span>Projects</span><span>Contact</span></div>
-              </nav>
-              <div className="sample-hero">
-                <p>Independent creative studio · Copenhagen</p>
-                <h1>We shape quiet ideas<br />into bold identities.</h1>
-                <div className="sample-cta">Explore our work <span>↘</span></div>
-              </div>
-              <div className="sample-art" aria-hidden="true">
-                <div className="art-orb" />
-                <div className="art-card">A new perspective<br />on the familiar.</div>
-              </div>
-              <div className="site-label">Reviewing <strong>{displayHost}</strong></div>
+            <div
+              className={`sample-site ${mode === "comment" && snapshotUrl ? "comment-cursor" : ""}`}
+              style={snapshotMeta?.viewportWidth && snapshotMeta?.viewportHeight ? { aspectRatio: `${snapshotMeta.viewportWidth} / ${snapshotMeta.viewportHeight}` } : undefined}
+              onClick={placeComment}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
+                event.preventDefault();
+                beginCommentAt(50, 50);
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label={snapshotUrl ? "Captured website. Press Enter to add feedback at the center." : "No captured website is available yet."}
+              ref={canvasRef}
+            >
+              {snapshotUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="review-snapshot" src={snapshotUrl} alt={`Captured view of ${snapshotMeta?.pageTitle || displayHost}`} draggable={false} />
+              ) : (
+                <div className="snapshot-empty">
+                  <span>↗</span>
+                  <strong>{snapshotLoading ? "Loading this review…" : "No page capture yet"}</strong>
+                  {!snapshotLoading && <p>{snapshotError || "Open this page with Pinpoint and press Share to capture the real website."}</p>}
+                </div>
+              )}
+              {snapshotUrl && <div className="site-label">Captured from <strong>{displayHost}</strong></div>}
 
-              {comments.map((comment, index) => (
-                <button
-                  className={`pin ${selectedId === comment.id ? "selected" : ""} ${comment.status === "resolved" ? "resolved" : ""}`}
-                  style={{ left: `${comment.x}%`, top: `${comment.y}%` }}
-                  type="button"
-                  key={comment.id}
-                  aria-label={`Open comment ${index + 1}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setSelectedId(comment.id);
-                    setPanelOpen(true);
-                    setFilter(comment.status);
-                  }}
-                ><span>{index + 1}</span></button>
-              ))}
+              {snapshotMeta && comments.map((comment, index) => {
+                const point = commentInSnapshot(comment, snapshotMeta);
+                if (!point) return null;
+                return (
+                  <button
+                    className={`pin ${selectedId === comment.id ? "selected" : ""} ${comment.status === "resolved" ? "resolved" : ""}`}
+                    style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                    type="button"
+                    key={comment.id}
+                    aria-label={`Open comment ${index + 1}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedId(comment.id);
+                      setPanelOpen(true);
+                      setFilter(comment.status);
+                    }}
+                  ><span>{index + 1}</span></button>
+                );
+              })}
 
               {draftPoint && (
                 <form
-                  className={`pin-composer ${draftPoint.x > 63 ? "opens-left" : ""} ${draftPoint.y > 62 ? "opens-up" : ""}`}
-                  style={{ left: `${draftPoint.x}%`, top: `${draftPoint.y}%` }}
+                  className={`pin-composer ${draftPoint.viewX > 63 ? "opens-left" : ""} ${draftPoint.viewY > 62 ? "opens-up" : ""}`}
+                  style={{ left: `${draftPoint.viewX}%`, top: `${draftPoint.viewY}%` }}
                   onSubmit={submitComment}
-                  onClick={(event) => event.stopPropagation()}
                 >
                   <div className="composer-top"><strong>Leave feedback</strong><button type="button" aria-label="Cancel comment" onClick={() => setDraftPoint(null)}>×</button></div>
                   <input aria-label="Your name" placeholder="Your name (optional)" value={author} onChange={(event) => setAuthor(event.target.value)} maxLength={60} />
@@ -312,7 +414,7 @@ export default function Home() {
               )}
             </div>
           </article>
-          <p className="canvas-note">Add <strong>{displayHost}</strong>, place feedback, then share one clean review link.</p>
+          <p className="canvas-note">{snapshotUrl ? <>Captured directly from <strong>{displayHost}</strong>. Feedback stays aligned to the shared view.</> : <>Use Pinpoint on <strong>{displayHost}</strong>, then press Share to publish its current view here.</>}</p>
         </div>
 
         <aside className={`comment-panel ${panelOpen ? "open" : ""}`} aria-label="Feedback panel">
@@ -330,7 +432,16 @@ export default function Home() {
             ) : visibleComments.map((comment) => {
               const number = comments.findIndex((item) => item.id === comment.id) + 1;
               return (
-                <article className={`comment-card ${selectedId === comment.id ? "selected" : ""}`} key={comment.id} onClick={() => setSelectedId(comment.id)}>
+                <div
+                  className={`comment-card ${selectedId === comment.id ? "selected" : ""}`}
+                  key={comment.id}
+                  onClick={() => setSelectedId(comment.id)}
+                  onKeyDown={(event) => {
+                    if (event.target === event.currentTarget && ["Enter", " "].includes(event.key)) setSelectedId(comment.id);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
                   <div className="comment-number">{number}</div>
                   <div className="comment-copy">
                     <strong>{comment.author}</strong><time>{formatTime(comment.createdAt)}</time>
@@ -339,7 +450,7 @@ export default function Home() {
                       {comment.status === "open" ? "✓ Resolve" : "↶ Reopen"}
                     </button>
                   </div>
-                </article>
+                </div>
               );
             })}
           </div>
@@ -350,8 +461,15 @@ export default function Home() {
       </section>
 
       {shareOpen && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setShareOpen(false)}>
-          <section className="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div
+          className="modal-backdrop"
+          role="button"
+          tabIndex={-1}
+          aria-label="Close share dialog"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setShareOpen(false); }}
+          onKeyDown={(event) => { if (event.key === "Escape") setShareOpen(false); }}
+        >
+          <section className="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-title">
             <button className="modal-close" type="button" aria-label="Close share dialog" onClick={() => setShareOpen(false)}>×</button>
             <div className="share-icon">↗</div>
             <p className="eyebrow">Ready for review</p>

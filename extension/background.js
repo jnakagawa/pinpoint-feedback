@@ -151,7 +151,50 @@ async function backendRequest(path, method, payload = null, pageUrl = null, canR
   return data;
 }
 
-async function handleMessage(message) {
+async function uploadSnapshot(image, message, canRefresh = true) {
+  const { zeroSession } = await storage.get("zeroSession");
+  if (!zeroSession?.accessToken) throw new Error("Sign in with Zero first.");
+  const url = new URL("/api/snapshot", BACKEND_ROOT);
+  url.searchParams.set("url", message.pageUrl);
+  const metrics = message.metrics || {};
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${zeroSession.accessToken}`,
+      "content-type": image.type || "image/jpeg",
+      "x-page-title": encodeURIComponent(String(message.pageTitle || "Untitled page").slice(0, 200)),
+      "x-page-width": String(metrics.pageWidth || 0),
+      "x-page-height": String(metrics.pageHeight || 0),
+      "x-viewport-width": String(metrics.viewportWidth || 0),
+      "x-viewport-height": String(metrics.viewportHeight || 0),
+      "x-scroll-x": String(metrics.scrollX || 0),
+      "x-scroll-y": String(metrics.scrollY || 0),
+      "x-device-pixel-ratio": String(metrics.devicePixelRatio || 1),
+    },
+    body: image,
+  });
+  if (response.status === 401 && canRefresh && zeroSession.refreshToken) {
+    const refreshed = await refreshZeroSession(zeroSession.refreshToken);
+    if (refreshed) return uploadSnapshot(image, message, false);
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Pinpoint capture failed (${response.status}).`);
+  return data;
+}
+
+async function captureSnapshot(message, sender) {
+  if (!sender.tab || !Number.isInteger(sender.tab.windowId)) {
+    throw new Error("Pinpoint could not identify the page to capture.");
+  }
+  const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, {
+    format: "jpeg",
+    quality: 88,
+  });
+  const image = await fetch(dataUrl).then((response) => response.blob());
+  return uploadSnapshot(image, message);
+}
+
+async function handleMessage(message, sender) {
   switch (message.type) {
     case "ZERO_AUTH_START":
       return startZeroAuth();
@@ -180,13 +223,15 @@ async function handleMessage(message) {
       return backendRequest("/api/access", "GET", null, message.pageUrl);
     case "ACCESS_UPDATE":
       return backendRequest("/api/access", "PUT", message.access);
+    case "SNAPSHOT_CAPTURE":
+      return captureSnapshot(message, sender);
     default:
       throw new Error("Unknown Pinpoint request.");
   }
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  handleMessage(message)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  handleMessage(message, sender)
     .then((data) => sendResponse({ ok: true, data }))
     .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : "Unexpected error" }));
   return true;

@@ -112,14 +112,38 @@
   }
 
   async function shareReview() {
+    const shareButton = $(".pp-share-review");
+    const originalMarkup = shareButton.innerHTML;
     try {
+      shareButton.disabled = true;
+      shareButton.innerHTML = "<span>◌</span> Capturing…";
+      const { width, height } = pageDimensions();
+      shell.style.visibility = "hidden";
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await send("SNAPSHOT_CAPTURE", {
+        pageUrl: state.pageUrl,
+        pageTitle: document.title || new URL(state.pageUrl).hostname,
+        metrics: {
+          pageWidth: width,
+          pageHeight: height,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
+          devicePixelRatio: window.devicePixelRatio || 1,
+        },
+      });
       await copyText(publicReviewUrl());
       const protectedDomain = state.access?.allowedDomain;
       toast(protectedDomain
-        ? `Protected review link copied — @${protectedDomain} Zero sign-in required.`
-        : "Public review link copied — guests can collaborate without Zero or the extension.");
+        ? `Page captured. Protected link copied — @${protectedDomain} Zero sign-in required.`
+        : "Page captured. Public link copied — guests can collaborate without Zero or the extension.");
     } catch (error) {
       toast(error.message, true);
+    } finally {
+      shell.style.visibility = "";
+      shareButton.disabled = false;
+      shareButton.innerHTML = originalMarkup;
     }
   }
 
