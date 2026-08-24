@@ -1,0 +1,1 @@
+CREATE INDEX `idx_comments_status_created_at` ON `comments` (`status`,`created_at`);
