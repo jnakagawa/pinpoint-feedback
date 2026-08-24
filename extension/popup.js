@@ -5,6 +5,7 @@ const views = {
   signedIn: document.querySelector("#signed-in"),
 };
 const notice = document.querySelector("#notice");
+const MESSAGE_TIMEOUT_MS = 5000;
 let authPending = null;
 let pollTimer = null;
 
@@ -14,11 +15,29 @@ function show(name) {
 
 function message(type, payload = {}) {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ type, ...payload }, (response) => {
-      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
-      if (!response?.ok) return reject(new Error(response?.error || "Pinpoint could not complete that action."));
-      resolve(response.data);
-    });
+    let settled = false;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      callback();
+    };
+    const timeout = window.setTimeout(() => {
+      finish(() => reject(new Error("Pinpoint took too long to respond. Close and reopen the extension.")));
+    }, MESSAGE_TIMEOUT_MS);
+
+    try {
+      chrome.runtime.sendMessage({ type, ...payload }, (response) => {
+        const runtimeError = chrome.runtime.lastError;
+        finish(() => {
+          if (runtimeError) return reject(new Error(runtimeError.message));
+          if (!response?.ok) return reject(new Error(response?.error || "Pinpoint could not complete that action."));
+          resolve(response.data);
+        });
+      });
+    } catch (error) {
+      finish(() => reject(error));
+    }
   });
 }
 
@@ -51,14 +70,16 @@ function renderPending(pending) {
 }
 
 async function loadStatus() {
+  // Keep the primary sign-in action available while the background worker wakes up.
+  show("signedOut");
   try {
     const status = await message("ZERO_AUTH_STATUS");
     if (status.signedIn) return renderSignedIn(status);
     if (status.pending && status.pending.expiresAt > Date.now()) return renderPending(status.pending);
     show("signedOut");
-  } catch (error) {
+  } catch {
     show("signedOut");
-    flash(error.message, true);
+    flash("Pinpoint is ready. Sign in with Zero to start marking up this page.");
   }
 }
 
