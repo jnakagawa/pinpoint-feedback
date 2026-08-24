@@ -15,6 +15,13 @@
       "when": 1787600075725,
       "tag": "0001_chief_gabe_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787601189310,
+      "tag": "0002_charming_photon",
+      "breakpoints": true
     }
   ]
 }

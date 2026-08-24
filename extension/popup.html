@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pinpoint</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main class="popup-shell">
+    <header>
+      <div class="brand"><span class="brand-mark">p</span><span>pinpoint</span></div>
+      <span class="version">EXTENSION</span>
+    </header>
+
+    <section id="loading" class="state loading-state">
+      <span class="spinner"></span>
+      <p>Connecting to Zero…</p>
+    </section>
+
+    <section id="signed-out" class="state" hidden>
+      <div class="hero-art" aria-hidden="true"><i></i><i></i><b>1</b><b>2</b></div>
+      <p class="eyebrow">Visual feedback, anywhere</p>
+      <h1>Comment directly on the live website.</h1>
+      <p class="lede">Sign in with Zero to sync review pins across your team—without creating another product account.</p>
+      <button id="sign-in" class="primary" type="button"><span class="zero-mark">0</span> Continue with Zero</button>
+      <p class="fine-print">Zero Auth opens a secure approval page. Pinpoint never sees your password or wallet key.</p>
+    </section>
+
+    <section id="pending" class="state" hidden>
+      <p class="eyebrow">Approve with Zero</p>
+      <h1>Finish sign-in in the tab we opened.</h1>
+      <div class="code-row"><span>Your code</span><strong id="user-code">—</strong></div>
+      <div class="pending-row"><span class="spinner small"></span><span>Waiting for approval…</span></div>
+      <button id="open-zero" class="secondary" type="button">Open approval page</button>
+      <button id="restart-auth" class="text-button" type="button">Start over</button>
+    </section>
+
+    <section id="signed-in" class="state" hidden>
+      <div class="account-card">
+        <span class="zero-avatar">0</span>
+        <div><strong id="account-email">Connected with Zero</strong><span id="wallet-address">Managed wallet</span></div>
+        <i>✓</i>
+      </div>
+      <label for="display-name">Comment as</label>
+      <div class="input-row"><input id="display-name" maxlength="60" placeholder="Your display name" /><button id="save-name" type="button">Save</button></div>
+      <button id="toggle-page" class="primary dark" type="button">Start commenting on this page <span>↗</span></button>
+      <div class="quick-guide"><span><b>1</b> Click the extension</span><span><b>2</b> Pin the page</span><span><b>3</b> Share feedback</span></div>
+      <button id="sign-out" class="text-button" type="button">Sign out of Zero</button>
+    </section>
+
+    <div id="notice" class="notice" role="status" hidden></div>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
