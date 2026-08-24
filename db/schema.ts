@@ -19,3 +19,11 @@ export const comments = sqliteTable(
     index("idx_comments_page_status_created_at").on(table.pageUrl, table.status, table.createdAt),
   ],
 );
+
+export const pageAccess = sqliteTable("page_access", {
+  pageUrl: text("page_url").primaryKey(),
+  allowedDomain: text("allowed_domain").notNull(),
+  ownerZeroUserId: text("owner_zero_user_id").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

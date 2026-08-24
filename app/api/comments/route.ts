@@ -1,4 +1,5 @@
 import { getCommentsDb, type StoredComment } from "../../../db/comments";
+import { PageAccessError, requirePageAccess } from "../../../db/page-access";
 import { requireZeroUser, ZeroAuthError } from "../../zero-auth";
 
 const corsHeaders = {
@@ -30,6 +31,7 @@ function cleanPageUrl(value: unknown) {
 
 function errorResponse(error: unknown, fallback: string) {
   if (error instanceof ZeroAuthError) return json({ error: error.message }, { status: 401 });
+  if (error instanceof PageAccessError) return json({ error: error.message }, { status: error.status });
   return json({ error: error instanceof Error ? error.message : fallback }, { status: 500 });
 }
 
@@ -39,11 +41,12 @@ export function OPTIONS() {
 
 export async function GET(request: Request) {
   try {
-    await requireZeroUser(request);
+    const zeroUser = await requireZeroUser(request);
     const pageUrl = cleanPageUrl(new URL(request.url).searchParams.get("url"));
     if (!pageUrl) return json({ error: "A valid page URL is required" }, { status: 400 });
 
     const db = await getCommentsDb();
+    await requirePageAccess(db, zeroUser, pageUrl);
     const result = await db.prepare(`SELECT id, author, body, page_url AS pageUrl,
       page_title AS pageTitle, zero_user_id AS zeroUserId, x, y, status,
       created_at AS createdAt FROM comments WHERE page_url = ?
@@ -71,6 +74,7 @@ export async function POST(request: Request) {
     }
 
     const db = await getCommentsDb();
+    await requirePageAccess(db, zeroUser, pageUrl);
     const result = await db.prepare(`INSERT INTO comments
       (author, body, page_url, page_title, zero_user_id, x, y, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'open')`)
@@ -89,13 +93,14 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    await requireZeroUser(request);
+    const zeroUser = await requireZeroUser(request);
     const payload = (await request.json()) as { id?: number; status?: string; pageUrl?: string };
     const pageUrl = cleanPageUrl(payload.pageUrl);
     if (!Number.isInteger(payload.id) || !["open", "resolved"].includes(payload.status || "") || !pageUrl) {
       return json({ error: "A valid comment, page URL, and status are required" }, { status: 400 });
     }
     const db = await getCommentsDb();
+    await requirePageAccess(db, zeroUser, pageUrl);
     await db.prepare("UPDATE comments SET status = ? WHERE id = ? AND page_url = ?")
       .bind(payload.status, payload.id, pageUrl)
       .run();

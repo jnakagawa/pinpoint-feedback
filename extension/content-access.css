@@ -1,0 +1,152 @@
+.pp-tool:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.pp-access {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--pp-line);
+  background: #f6f6f1;
+}
+
+.pp-access-row {
+  display: grid;
+  grid-template-columns: 31px 1fr auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.pp-access-icon {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #e8e9e3;
+  color: #757a70;
+  font-size: 12px;
+}
+
+.pp-access-row strong,
+.pp-access-row small {
+  display: block;
+}
+
+.pp-access-row strong {
+  font-size: 9px;
+}
+
+.pp-access-row small {
+  margin-top: 2px;
+  color: #8c9087;
+  font-size: 8px;
+}
+
+.pp-access-manage {
+  height: 27px;
+  padding: 0 9px;
+  border: 1px solid var(--pp-line);
+  border-radius: 7px;
+  background: white;
+  color: #6255ce;
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pp-access.is-protected .pp-access-icon {
+  background: #e9e6ff;
+  color: #6457ca;
+}
+
+.pp-access.is-denied {
+  background: #fff1ef;
+}
+
+.pp-access.is-denied .pp-access-icon {
+  background: #f7dcd7;
+  color: #9c453e;
+}
+
+.pp-access-form {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--pp-line);
+}
+
+.pp-access-form label {
+  display: block;
+  margin-bottom: 6px;
+  color: #777b72;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.pp-access-form > div:first-of-type {
+  display: grid;
+  grid-template-columns: 25px 1fr auto;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--pp-line);
+  border-radius: 9px;
+  background: white;
+}
+
+.pp-access-form > div:first-of-type > span {
+  color: #888c83;
+  font-size: 10px;
+  text-align: right;
+}
+
+.pp-access-form input {
+  min-width: 0;
+  height: 34px;
+  padding: 0 7px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--pp-ink);
+  font-size: 10px;
+}
+
+.pp-access-form > div:first-of-type > button {
+  height: 28px;
+  margin-right: 3px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--pp-ink);
+  color: white;
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pp-access-form p {
+  margin: 6px 0 0;
+  color: #9a9d95;
+  font-size: 8px;
+}
+
+.pp-access-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 7px;
+}
+
+.pp-access-actions button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #878b82;
+  font-size: 8px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.pp-access-actions .pp-access-remove {
+  color: #a4453e;
+}

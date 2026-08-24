@@ -7,6 +7,10 @@
   stylesheet.rel = "stylesheet";
   stylesheet.href = chrome.runtime.getURL("content.css");
   shadow.append(stylesheet);
+  const accessStylesheet = document.createElement("link");
+  accessStylesheet.rel = "stylesheet";
+  accessStylesheet.href = chrome.runtime.getURL("content-access.css");
+  shadow.append(accessStylesheet);
 
   const shell = document.createElement("div");
   shell.className = "pp-shell";
@@ -27,6 +31,19 @@
         <button type="button" data-filter="resolved">Resolved <b>0</b></button>
         <button type="button" data-filter="all">All <b>0</b></button>
       </nav>
+      <section class="pp-access" aria-label="Page protection">
+        <div class="pp-access-row">
+          <span class="pp-access-icon">◇</span>
+          <div><strong>Checking page access…</strong><small>Zero email protection</small></div>
+          <button class="pp-access-manage" type="button" hidden>Protect</button>
+        </div>
+        <form class="pp-access-form" hidden>
+          <label for="pp-domain">Allow Zero accounts from</label>
+          <div><span>@</span><input id="pp-domain" type="text" inputmode="url" autocomplete="off" maxlength="253" placeholder="studio.com"><button type="submit">Apply</button></div>
+          <p>The domain must match the email on your Zero account.</p>
+          <div class="pp-access-actions"><button class="pp-access-cancel" type="button">Cancel</button><button class="pp-access-remove" type="button" hidden>Remove restriction</button></div>
+        </form>
+      </section>
       <div class="pp-list"></div>
       <footer><span><i></i> Synced with Zero</span><button class="pp-refresh" type="button">Refresh</button></footer>
     </aside>
@@ -54,6 +71,7 @@
     point: null,
     pageUrl: normalizedPageUrl(),
     settings: {},
+    access: null,
   };
 
   function normalizedPageUrl() {
@@ -208,10 +226,64 @@
     list.replaceChildren();
     if (!visible.length) list.append(buildEmptyState());
     visible.forEach((comment) => list.append(buildCommentCard(comment, state.comments.indexOf(comment))));
+    renderAccess();
+  }
+
+  function renderAccess() {
+    const access = state.access;
+    const section = $(".pp-access");
+    const icon = section.querySelector(".pp-access-icon");
+    const title = section.querySelector("strong");
+    const copy = section.querySelector("small");
+    const manage = section.querySelector(".pp-access-manage");
+    const remove = section.querySelector(".pp-access-remove");
+    const commentButton = $(".pp-comment-mode");
+    if (!access) {
+      title.textContent = "Checking page access…";
+      copy.textContent = "Zero email protection";
+      manage.hidden = true;
+      return;
+    }
+
+    section.classList.toggle("is-protected", Boolean(access.allowedDomain));
+    section.classList.toggle("is-denied", !access.hasAccess);
+    icon.textContent = access.allowedDomain ? "◆" : "◇";
+    if (!access.allowedDomain) {
+      title.textContent = "Anyone with Zero can collaborate";
+      copy.textContent = access.emailDomain
+        ? `Optional: restrict this page to @${access.emailDomain}`
+        : "Add a domain email to Zero to protect this page";
+    } else {
+      title.textContent = `Restricted to @${access.allowedDomain}`;
+      copy.textContent = access.hasAccess
+        ? "Your Zero account matches this domain"
+        : "Use a matching Zero account to see or edit feedback";
+    }
+    manage.textContent = access.allowedDomain ? "Manage" : "Protect";
+    manage.hidden = !access.canManage;
+    remove.hidden = !access.allowedDomain;
+    commentButton.disabled = !access.hasAccess;
+  }
+
+  async function loadAccess() {
+    const result = await send("ACCESS_GET", { pageUrl: state.pageUrl });
+    state.access = result.access;
+    renderAccess();
+    return result.access;
   }
 
   async function loadComments(showConfirmation = false) {
     try {
+      const access = await loadAccess();
+      if (!access.hasAccess) {
+        state.comments = [];
+        setCommentMode(false);
+        renderPins();
+        renderPanel();
+        panel.hidden = false;
+        toast(`This page is restricted to @${access.allowedDomain}.`, true);
+        return;
+      }
       const result = await send("COMMENTS_LIST", { pageUrl: state.pageUrl });
       state.comments = result.comments || [];
       renderPins();
@@ -242,6 +314,10 @@
   }
 
   function openComposer(clientX, clientY) {
+    if (state.access && !state.access.hasAccess) {
+      toast(`Use a Zero account with an @${state.access.allowedDomain} email.`, true);
+      return;
+    }
     const { width, height } = pageDimensions();
     state.point = {
       x: Math.max(0, Math.min(100, ((clientX + window.scrollX) / width) * 100)),
@@ -310,6 +386,20 @@
     else await loadComments();
   }
 
+  async function saveProtection(allowedDomain) {
+    try {
+      const result = await send("ACCESS_UPDATE", {
+        access: { pageUrl: state.pageUrl, allowedDomain },
+      });
+      state.access = result.access;
+      $(".pp-access-form").hidden = true;
+      renderAccess();
+      toast(allowedDomain === null ? "Domain restriction removed" : `Protected for @${result.access.allowedDomain}`);
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
   function deactivate() {
     state.active = false;
     shell.hidden = true;
@@ -318,7 +408,13 @@
     host.classList.remove("is-targeting");
   }
 
-  $(".pp-comment-mode").addEventListener("click", () => setCommentMode(!state.commentMode));
+  $(".pp-comment-mode").addEventListener("click", () => {
+    if (state.access && !state.access.hasAccess) {
+      toast(`Use a Zero account with an @${state.access.allowedDomain} email.`, true);
+      return;
+    }
+    setCommentMode(!state.commentMode);
+  });
   $(".pp-panel-toggle").addEventListener("click", () => { panel.hidden = !panel.hidden; if (!panel.hidden) renderPanel(); });
   $(".pp-close").addEventListener("click", deactivate);
   $(".pp-panel-close").addEventListener("click", () => { panel.hidden = true; });
@@ -326,6 +422,19 @@
   $(".pp-cancel").addEventListener("click", closeComposer);
   $(".pp-submit").addEventListener("click", postComment);
   $(".pp-refresh").addEventListener("click", () => loadComments(true));
+  $(".pp-access-manage").addEventListener("click", () => {
+    const form = $(".pp-access-form");
+    const input = $("#pp-domain");
+    input.value = state.access?.allowedDomain || state.access?.emailDomain || "";
+    form.hidden = false;
+    requestAnimationFrame(() => input.focus());
+  });
+  $(".pp-access-cancel").addEventListener("click", () => { $(".pp-access-form").hidden = true; });
+  $(".pp-access-remove").addEventListener("click", () => saveProtection(null));
+  $(".pp-access-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveProtection($("#pp-domain").value.trim());
+  });
   textarea.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeComposer();
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) postComment();
@@ -343,6 +452,7 @@
     if (!state.active || current === state.pageUrl) return;
     state.pageUrl = current;
     state.comments = [];
+    state.access = null;
     closeComposer();
     loadComments();
   }, 1200);

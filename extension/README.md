@@ -2,6 +2,8 @@
 
 Pinpoint lets reviewers drop numbered feedback pins directly onto any normal `http` or `https` page. Comments are grouped by the page URL and synchronized through the Pinpoint API after the reviewer signs in with Zero Auth.
 
+Page owners can optionally restrict a page's feedback to the email domain on their Zero account. The API enforces that restriction for reads and writes; the extension UI is only a control surface for the server-side policy.
+
 ## Install locally
 
 1. Extract the extension folder if you downloaded the ZIP.

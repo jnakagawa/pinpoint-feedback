@@ -1,6 +1,6 @@
 const ZERO_API = "https://api.zero.xyz";
 const ZERO_SDK_VERSION = "1.33.0";
-const BACKEND_API = "https://pinpoint-feedback.transqualia.chatgpt.site/api/comments";
+const BACKEND_ROOT = "https://pinpoint-feedback.transqualia.chatgpt.site";
 
 const storage = {
   async get(keys) {
@@ -129,10 +129,10 @@ async function signOut() {
   return { ok: true };
 }
 
-async function backendRequest(method, payload = null, pageUrl = null, canRefresh = true) {
+async function backendRequest(path, method, payload = null, pageUrl = null, canRefresh = true) {
   const { zeroSession } = await storage.get("zeroSession");
   if (!zeroSession?.accessToken) throw new Error("Sign in with Zero first.");
-  const url = new URL(BACKEND_API);
+  const url = new URL(path, BACKEND_ROOT);
   if (pageUrl) url.searchParams.set("url", pageUrl);
   const response = await fetch(url, {
     method,
@@ -144,7 +144,7 @@ async function backendRequest(method, payload = null, pageUrl = null, canRefresh
   });
   if (response.status === 401 && canRefresh && zeroSession.refreshToken) {
     const refreshed = await refreshZeroSession(zeroSession.refreshToken);
-    if (refreshed) return backendRequest(method, payload, pageUrl, false);
+    if (refreshed) return backendRequest(path, method, payload, pageUrl, false);
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Pinpoint sync failed (${response.status}).`);
@@ -171,11 +171,15 @@ async function handleMessage(message) {
       return { settings: next };
     }
     case "COMMENTS_LIST":
-      return backendRequest("GET", null, message.pageUrl);
+      return backendRequest("/api/comments", "GET", null, message.pageUrl);
     case "COMMENTS_CREATE":
-      return backendRequest("POST", message.comment);
+      return backendRequest("/api/comments", "POST", message.comment);
     case "COMMENTS_UPDATE":
-      return backendRequest("PATCH", message.comment);
+      return backendRequest("/api/comments", "PATCH", message.comment);
+    case "ACCESS_GET":
+      return backendRequest("/api/access", "GET", null, message.pageUrl);
+    case "ACCESS_UPDATE":
+      return backendRequest("/api/access", "PUT", message.access);
     default:
       throw new Error("Unknown Pinpoint request.");
   }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pinpoint — Visual Website Feedback",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Drop contextual feedback directly on any website and sync it with your team using Zero Auth.",
   "permissions": ["activeTab", "storage", "tabs"],
   "host_permissions": [
@@ -27,7 +27,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["content.css"],
+      "resources": ["content.css", "content-access.css"],
       "matches": ["http://*/*", "https://*/*"]
     }
   ]

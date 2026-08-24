@@ -30,6 +30,13 @@ export async function getCommentsDb() {
       status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS page_access (
+      page_url TEXT PRIMARY KEY,
+      allowed_domain TEXT NOT NULL,
+      owner_zero_user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
   ]);
 
   const tableInfo = await db.prepare("PRAGMA table_info(comments)").all<{ name: string }>();
