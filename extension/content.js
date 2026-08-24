@@ -4,6 +4,7 @@
   const PUBLIC_REVIEW_ROOT = "https://pinpoint-feedback.transqualia.chatgpt.site/";
 
   const host = document.createElement("pinpoint-feedback-root");
+  host.dataset.pinpointVersion = chrome.runtime.getManifest().version;
   const shadow = host.attachShadow({ mode: "closed" });
   const stylesheet = document.createElement("link");
   stylesheet.rel = "stylesheet";

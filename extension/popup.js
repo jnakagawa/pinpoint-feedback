@@ -1,5 +1,4 @@
 const views = {
-  loading: document.querySelector("#loading"),
   signedOut: document.querySelector("#signed-out"),
   pending: document.querySelector("#pending"),
   signedIn: document.querySelector("#signed-in"),
