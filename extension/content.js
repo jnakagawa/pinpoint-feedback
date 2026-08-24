@@ -1,6 +1,8 @@
 (() => {
   if (window.top !== window || document.querySelector("pinpoint-feedback-root")) return;
 
+  const PUBLIC_REVIEW_ROOT = "https://pinpoint-feedback.transqualia.chatgpt.site/";
+
   const host = document.createElement("pinpoint-feedback-root");
   const shadow = host.attachShadow({ mode: "closed" });
   const stylesheet = document.createElement("link");
@@ -21,6 +23,7 @@
       <span class="pp-divider"></span>
       <button class="pp-tool pp-comment-mode is-active" type="button" aria-pressed="true"><span>＋</span> Comment</button>
       <button class="pp-tool pp-panel-toggle" type="button"><span>☰</span> Feedback <em class="pp-count">0</em></button>
+      <button class="pp-tool pp-share-review" type="button" title="Copy a browser link for this review"><span>↗</span> Share</button>
       <button class="pp-close" type="button" aria-label="Hide Pinpoint">×</button>
     </div>
     <div class="pp-pins" aria-live="polite"></div>
@@ -78,6 +81,45 @@
     const url = new URL(location.href);
     url.hash = "";
     return url.toString();
+  }
+
+  function publicReviewUrl() {
+    const url = new URL(PUBLIC_REVIEW_ROOT);
+    url.searchParams.set("url", state.pageUrl);
+    return url.toString();
+  }
+
+  async function copyText(value) {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return;
+      } catch {
+        // Some pages block the Clipboard API even when the click is user initiated.
+      }
+    }
+
+    const fallback = document.createElement("textarea");
+    fallback.value = value;
+    fallback.setAttribute("readonly", "");
+    fallback.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none";
+    shell.append(fallback);
+    fallback.select();
+    const copied = document.execCommand("copy");
+    fallback.remove();
+    if (!copied) throw new Error("The review link could not be copied.");
+  }
+
+  async function shareReview() {
+    try {
+      await copyText(publicReviewUrl());
+      const protectedDomain = state.access?.allowedDomain;
+      toast(protectedDomain
+        ? `Protected review link copied — @${protectedDomain} Zero sign-in required.`
+        : "Public review link copied — guests can collaborate without Zero or the extension.");
+    } catch (error) {
+      toast(error.message, true);
+    }
   }
 
   function send(type, payload = {}) {
@@ -249,10 +291,10 @@
     section.classList.toggle("is-denied", !access.hasAccess);
     icon.textContent = access.allowedDomain ? "◆" : "◇";
     if (!access.allowedDomain) {
-      title.textContent = "Anyone with Zero can collaborate";
+      title.textContent = "Anyone with the public link can collaborate";
       copy.textContent = access.emailDomain
         ? `Optional: restrict this page to @${access.emailDomain}`
-        : "Add a domain email to Zero to protect this page";
+        : "Guests do not need Zero or the extension";
     } else {
       title.textContent = `Restricted to @${access.allowedDomain}`;
       copy.textContent = access.hasAccess
@@ -416,6 +458,7 @@
     setCommentMode(!state.commentMode);
   });
   $(".pp-panel-toggle").addEventListener("click", () => { panel.hidden = !panel.hidden; if (!panel.hidden) renderPanel(); });
+  $(".pp-share-review").addEventListener("click", shareReview);
   $(".pp-close").addEventListener("click", deactivate);
   $(".pp-panel-close").addEventListener("click", () => { panel.hidden = true; });
   $(".pp-composer-close").addEventListener("click", closeComposer);
