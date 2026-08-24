@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Collaborative visual website feedback powered by Zero Auth.">
+  <title>Pinpoint — visual website feedback</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="review-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Pinpoint home"><span class="brand-mark">p</span><span>pinpoint</span></a>
+      <div class="review-title"><strong id="review-title">Website review</strong><span>Website review</span></div>
+      <div class="topbar-actions">
+        <span class="saved-state"><i></i> Saved</span>
+        <button id="comments-toggle" class="comments-toggle" type="button">0 comments</button>
+        <button id="share-review" class="share-button" type="button">Copy review link</button>
+      </div>
+    </header>
+
+    <section id="review-layout" class="review-layout panel-is-open">
+      <nav class="toolrail" aria-label="Review tools">
+        <button id="comment-tool" class="tool active" type="button" aria-label="Comment tool" aria-pressed="true">+</button>
+        <button id="navigate-tool" class="tool" type="button" aria-label="Navigate tool" aria-pressed="false">↗</button>
+        <button id="panel-tool" class="tool" type="button" aria-label="Toggle comments">☷</button>
+        <span class="tool-spacer"></span>
+        <button id="help-tool" class="tool" type="button" aria-label="Help">?</button>
+      </nav>
+
+      <div class="canvas-wrap">
+        <div class="mode-pill"><span>●</span><b id="mode-copy">Loading page capture…</b></div>
+        <article class="browser-frame" aria-label="Website under review">
+          <div class="browser-bar">
+            <div class="traffic"><i></i><i></i><i></i></div>
+            <form id="address-form" class="address">
+              <label class="sr-only" for="review-url">Website URL</label>
+              <input id="review-url" aria-label="Website URL">
+              <button type="submit" aria-label="Load website">↵</button>
+            </form>
+            <a id="open-original" class="open-icon" target="_blank" rel="noreferrer" aria-label="Open original website">↗</a>
+          </div>
+          <div id="review-canvas" class="review-canvas" role="button" tabindex="0" aria-label="Captured website">
+            <div id="snapshot-empty" class="snapshot-empty">
+              <span>↗</span><strong>Loading this review…</strong><p></p>
+            </div>
+            <img id="review-snapshot" class="review-snapshot" alt="" draggable="false" hidden>
+            <div id="site-label" class="site-label" hidden>Captured from <strong></strong></div>
+            <div id="pins"></div>
+          </div>
+        </article>
+        <p id="canvas-note" class="canvas-note"></p>
+      </div>
+
+      <aside id="comment-panel" class="comment-panel open" aria-label="Feedback panel">
+        <div class="panel-head">
+          <div><h2>Feedback</h2><span id="open-summary">0 open comments</span></div>
+          <button id="panel-close" type="button" aria-label="Close feedback">×</button>
+        </div>
+        <div class="filter-tabs" role="tablist" aria-label="Comment status">
+          <button id="open-tab" class="active" type="button" role="tab" aria-selected="true">Open <span>0</span></button>
+          <button id="resolved-tab" type="button" role="tab" aria-selected="false">Resolved <span>0</span></button>
+        </div>
+        <div id="comment-list" class="comment-list"></div>
+        <button id="compose-button" class="comment-compose" type="button"><span>＋</span><b>Add feedback on the page</b></button>
+      </aside>
+    </section>
+    <div id="toast" class="toast" role="status" hidden></div>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 (() => {
   if (window.top !== window || document.querySelector("pinpoint-feedback-root")) return;
 
-  const PUBLIC_REVIEW_ROOT = "https://pinpoint-feedback.transqualia.chatgpt.site/";
+  const PUBLIC_REVIEW_ROOT = "https://cdn.withzero.xyz/EAOjJxtl/pinpoint-feedback/";
 
   const host = document.createElement("pinpoint-feedback-root");
   host.dataset.pinpointVersion = chrome.runtime.getManifest().version;

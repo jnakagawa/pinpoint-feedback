@@ -21,8 +21,9 @@ test("sharing captures the visible website and the public page renders that capt
   assert.match(page, /No page capture yet/);
   assert.doesNotMatch(page, /We shape quiet ideas|Independent creative studio|className="sample-art"/);
   assert.equal(hosting.r2, "SNAPSHOTS");
-  assert.equal(manifest.version, "0.5.0");
-  assert.match(popup, /v0\.5\.0/);
+  assert.equal(manifest.version, "0.5.1");
+  assert.match(popup, /v0\.5\.1/);
+  assert.match(content, /https:\/\/cdn\.withzero\.xyz\/EAOjJxtl\/pinpoint-feedback\//);
 });
 
 test("the extension captures the sender tab and uploads the image with page geometry", async () => {
