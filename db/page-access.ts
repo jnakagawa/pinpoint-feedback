@@ -55,19 +55,22 @@ export async function readPageAccess(db: CommentsDb, pageUrl: string) {
     .first<StoredPageAccess>();
 }
 
-export function describePageAccess(policy: StoredPageAccess | null, user: ZeroUser): PageAccessState {
-  const emailDomain = getEmailDomain(user.email);
+export function describePageAccess(policy: StoredPageAccess | null, user: ZeroUser | null): PageAccessState {
+  const emailDomain = getEmailDomain(user?.email ?? null);
   return {
     allowedDomain: policy?.allowedDomain || null,
     emailDomain,
     hasAccess: !policy || emailDomain === policy.allowedDomain,
-    canManage: policy ? policy.ownerZeroUserId === user.id : Boolean(emailDomain),
+    canManage: policy ? policy.ownerZeroUserId === user?.id : Boolean(emailDomain),
   };
 }
 
-export async function requirePageAccess(db: CommentsDb, user: ZeroUser, pageUrl: string) {
+export async function requirePageAccess(db: CommentsDb, user: ZeroUser | null, pageUrl: string) {
   const policy = await readPageAccess(db, pageUrl);
   const access = describePageAccess(policy, user);
+  if (policy && !user) {
+    throw new PageAccessError(`Sign in with a Zero account using an @${policy.allowedDomain} email.`, 401);
+  }
   if (!access.hasAccess) {
     throw new PageAccessError(`This page is restricted to Zero accounts with an @${policy?.allowedDomain} email.`);
   }

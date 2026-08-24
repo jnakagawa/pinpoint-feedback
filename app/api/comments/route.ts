@@ -1,6 +1,8 @@
 import { getCommentsDb, type StoredComment } from "../../../db/comments";
 import { PageAccessError, requirePageAccess } from "../../../db/page-access";
-import { requireZeroUser, ZeroAuthError } from "../../zero-auth";
+import { getZeroUser, ZeroAuthError } from "../../zero-auth";
+
+type CommentResponse = Omit<StoredComment, "zeroUserId">;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,18 +43,18 @@ export function OPTIONS() {
 
 export async function GET(request: Request) {
   try {
-    const zeroUser = await requireZeroUser(request);
+    const zeroUser = await getZeroUser(request);
     const pageUrl = cleanPageUrl(new URL(request.url).searchParams.get("url"));
     if (!pageUrl) return json({ error: "A valid page URL is required" }, { status: 400 });
 
     const db = await getCommentsDb();
     await requirePageAccess(db, zeroUser, pageUrl);
     const result = await db.prepare(`SELECT id, author, body, page_url AS pageUrl,
-      page_title AS pageTitle, zero_user_id AS zeroUserId, x, y, status,
+      page_title AS pageTitle, x, y, status,
       created_at AS createdAt FROM comments WHERE page_url = ?
       ORDER BY datetime(created_at) ASC, id ASC`)
       .bind(pageUrl)
-      .all<StoredComment>();
+      .all<CommentResponse>();
     return json({ comments: result.results });
   } catch (error) {
     return errorResponse(error, "Unable to load comments");
@@ -61,7 +63,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const zeroUser = await requireZeroUser(request);
+    const zeroUser = await getZeroUser(request);
     const payload = (await request.json()) as Partial<StoredComment>;
     const pageUrl = cleanPageUrl(payload.pageUrl);
     const pageTitle = payload.pageTitle?.trim().slice(0, 200) || "Untitled page";
@@ -78,13 +80,13 @@ export async function POST(request: Request) {
     const result = await db.prepare(`INSERT INTO comments
       (author, body, page_url, page_title, zero_user_id, x, y, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'open')`)
-      .bind(author, body, pageUrl, pageTitle, zeroUser.id, payload.x, payload.y)
+      .bind(author, body, pageUrl, pageTitle, zeroUser?.id || "guest", payload.x, payload.y)
       .run();
     const comment = await db.prepare(`SELECT id, author, body, page_url AS pageUrl,
-      page_title AS pageTitle, zero_user_id AS zeroUserId, x, y, status,
+      page_title AS pageTitle, x, y, status,
       created_at AS createdAt FROM comments WHERE id = ?`)
       .bind(result.meta.last_row_id)
-      .first<StoredComment>();
+      .first<CommentResponse>();
     return json({ comment }, { status: 201 });
   } catch (error) {
     return errorResponse(error, "Unable to save feedback");
@@ -93,7 +95,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const zeroUser = await requireZeroUser(request);
+    const zeroUser = await getZeroUser(request);
     const payload = (await request.json()) as { id?: number; status?: string; pageUrl?: string };
     const pageUrl = cleanPageUrl(payload.pageUrl);
     if (!Number.isInteger(payload.id) || !["open", "resolved"].includes(payload.status || "") || !pageUrl) {

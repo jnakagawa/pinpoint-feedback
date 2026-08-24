@@ -14,11 +14,10 @@ export class ZeroAuthError extends Error {
   }
 }
 
-export async function requireZeroUser(request: Request): Promise<ZeroUser> {
+export async function getZeroUser(request: Request): Promise<ZeroUser | null> {
   const authorization = request.headers.get("authorization");
-  if (!authorization?.startsWith("Bearer ")) {
-    throw new ZeroAuthError("Sign in with Zero to continue.");
-  }
+  if (!authorization) return null;
+  if (!authorization.startsWith("Bearer ")) throw new ZeroAuthError("Your Zero authorization is invalid.");
 
   const response = await fetch(`${ZERO_API}/v1/users/me/profile`, {
     headers: {
@@ -39,4 +38,10 @@ export async function requireZeroUser(request: Request): Promise<ZeroUser> {
     email: profile.user.email ?? null,
     walletAddress: profile.walletAddress ?? null,
   };
+}
+
+export async function requireZeroUser(request: Request): Promise<ZeroUser> {
+  const user = await getZeroUser(request);
+  if (!user) throw new ZeroAuthError("Sign in with Zero to continue.");
+  return user;
 }

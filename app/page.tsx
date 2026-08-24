@@ -12,7 +12,8 @@ type Comment = {
   createdAt: string;
 };
 
-const ZERO_FEEDBACK_URL = "https://cdn.withzero.xyz/EAOjJxtl/pinpoint-feedback/index.html";
+const PUBLIC_SITE_URL = "https://pinpoint-feedback.transqualia.chatgpt.site";
+const DEFAULT_REVIEW_URL = "https://kanso.studio/";
 
 const seedComments: Comment[] = [
   {
@@ -22,7 +23,7 @@ const seedComments: Comment[] = [
     x: 53,
     y: 38,
     status: "open",
-    createdAt: new Date().toISOString(),
+    createdAt: "2026-08-24T19:00:00.000Z",
   },
   {
     id: 2,
@@ -31,7 +32,7 @@ const seedComments: Comment[] = [
     x: 86,
     y: 74,
     status: "open",
-    createdAt: new Date(Date.now() - 240000).toISOString(),
+    createdAt: "2026-08-24T18:56:00.000Z",
   },
 ];
 
@@ -45,6 +46,17 @@ function formatTime(value: string) {
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
 }
 
+function normalizeReviewUrl(value: string) {
+  try {
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    if (!/^https?:$/.test(url.protocol)) return null;
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
   const [comments, setComments] = useState<Comment[]>(seedComments);
   const [mode, setMode] = useState<"comment" | "navigate">("comment");
@@ -53,8 +65,8 @@ export default function Home() {
   const [draftPoint, setDraftPoint] = useState<{ x: number; y: number } | null>(null);
   const [author, setAuthor] = useState("");
   const [body, setBody] = useState("");
-  const [address, setAddress] = useState("https://kanso.studio");
-  const [activeAddress, setActiveAddress] = useState("https://kanso.studio");
+  const [address, setAddress] = useState(DEFAULT_REVIEW_URL);
+  const [activeAddress, setActiveAddress] = useState(DEFAULT_REVIEW_URL);
   const [panelOpen, setPanelOpen] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -62,13 +74,33 @@ export default function Home() {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/comments")
-      .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((data: { comments?: Comment[] }) => {
-        if (data.comments?.length) setComments(data.comments);
-      })
-      .catch(() => undefined);
+    const timer = window.setTimeout(() => {
+      const requestedUrl = new URLSearchParams(window.location.search).get("url");
+      const normalized = requestedUrl ? normalizeReviewUrl(requestedUrl) : null;
+      if (normalized) {
+        setAddress(normalized);
+        setActiveAddress(normalized);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    const reviewUrl = normalizeReviewUrl(activeAddress) || DEFAULT_REVIEW_URL;
+    fetch(`/api/comments?url=${encodeURIComponent(reviewUrl)}`)
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to open this review");
+        return data;
+      })
+      .then((data: { comments?: Comment[] }) => {
+        setComments(data.comments || []);
+      })
+      .catch((error: Error) => {
+        setComments([]);
+        setToast(error.message);
+      });
+  }, [activeAddress]);
 
   useEffect(() => {
     if (!toast) return;
@@ -109,18 +141,22 @@ export default function Home() {
       const response = await fetch("/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(pending),
+        body: JSON.stringify({
+          ...pending,
+          pageUrl: normalizeReviewUrl(activeAddress) || DEFAULT_REVIEW_URL,
+          pageTitle: `${displayHost} review`,
+        }),
       });
-      if (!response.ok) throw new Error("Unable to save");
+      if (!response.ok) {
+        const error = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(error.error || "Unable to save feedback");
+      }
       const data = (await response.json()) as { comment: Comment };
       setComments((current) => [...current, data.comment]);
       setSelectedId(data.comment.id);
       setToast("Comment saved");
-    } catch {
-      const localComment: Comment = { ...pending, id: Date.now(), createdAt: new Date().toISOString() };
-      setComments((current) => [...current, localComment]);
-      setSelectedId(localComment.id);
-      setToast("Saved for this preview");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Unable to save feedback");
     } finally {
       setSaving(false);
       setDraftPoint(null);
@@ -131,11 +167,21 @@ export default function Home() {
   async function toggleResolved(comment: Comment) {
     const status = comment.status === "open" ? "resolved" : "open";
     setComments((current) => current.map((item) => (item.id === comment.id ? { ...item, status } : item)));
-    await fetch("/api/comments", {
+    const response = await fetch("/api/comments", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: comment.id, status }),
-    }).catch(() => undefined);
+      body: JSON.stringify({
+        id: comment.id,
+        status,
+        pageUrl: normalizeReviewUrl(activeAddress) || DEFAULT_REVIEW_URL,
+      }),
+    }).catch(() => null);
+    if (!response?.ok) {
+      setComments((current) => current.map((item) => (item.id === comment.id ? { ...item, status: comment.status } : item)));
+      const error = response ? await response.json().catch(() => ({})) as { error?: string } : {};
+      setToast(error.error || "Unable to update this feedback");
+      return;
+    }
     setToast(status === "resolved" ? "Marked resolved" : "Reopened");
   }
 
@@ -143,13 +189,18 @@ export default function Home() {
     event.preventDefault();
     const next = address.trim();
     if (!next) return;
-    setActiveAddress(/^https?:\/\//i.test(next) ? next : `https://${next}`);
+    const normalized = normalizeReviewUrl(next);
+    if (!normalized) {
+      setToast("Enter a valid website URL");
+      return;
+    }
+    setAddress(normalized);
+    setActiveAddress(normalized);
     setToast("Review canvas updated");
   }
 
   function copyShareLink() {
-    const link = ZERO_FEEDBACK_URL.startsWith("http") ? ZERO_FEEDBACK_URL : window.location.href;
-    navigator.clipboard?.writeText(link).then(() => setToast("Reviewer link copied"));
+    navigator.clipboard?.writeText(shareLink).then(() => setToast("Reviewer link copied"));
   }
 
   const displayHost = (() => {
@@ -159,6 +210,7 @@ export default function Home() {
       return activeAddress;
     }
   })();
+  const shareLink = `${PUBLIC_SITE_URL}/?url=${encodeURIComponent(normalizeReviewUrl(activeAddress) || DEFAULT_REVIEW_URL)}`;
 
   return (
     <main className="review-shell">
@@ -304,14 +356,14 @@ export default function Home() {
             <div className="share-icon">↗</div>
             <p className="eyebrow">Ready for review</p>
             <h2 id="share-title">Send one link.<br />Keep every note in context.</h2>
-            <p>Guests can open the review and leave feedback without creating an account.</p>
+            <p>Public reviews open in any browser and accept feedback without an account. Protected reviews ask for a matching Zero account.</p>
             <div className="share-link-row">
-              <span>{ZERO_FEEDBACK_URL.startsWith("http") ? ZERO_FEEDBACK_URL : "Your reviewer link"}</span>
+              <span>{shareLink}</span>
               <button type="button" onClick={copyShareLink}>Copy link</button>
             </div>
-            <a className={`zero-link ${ZERO_FEEDBACK_URL.startsWith("http") ? "" : "pending"}`} href={ZERO_FEEDBACK_URL.startsWith("http") ? ZERO_FEEDBACK_URL : "#"} target="_blank" rel="noreferrer" onClick={(event) => { if (!ZERO_FEEDBACK_URL.startsWith("http")) event.preventDefault(); }}>
+            <a className="zero-link" href={shareLink} target="_blank" rel="noreferrer">
               <span className="zero-badge">0</span>
-              <span><strong>Hosted with Zero</strong><small>{ZERO_FEEDBACK_URL.startsWith("http") ? "Open the public feedback page" : "Connecting the public page…"}</small></span>
+              <span><strong>Public browser review</strong><small>Open without installing the extension</small></span>
               <b>↗</b>
             </a>
           </section>
