@@ -1,7 +1,7 @@
 (() => {
   if (window.top !== window || document.querySelector("pinpoint-feedback-root")) return;
 
-  const PUBLIC_REVIEW_ROOT = "https://cdn.withzero.xyz/EAOjJxtl/pinpoint-feedback/";
+  const PUBLIC_REVIEW_ROOT = "https://deploy-9po6nd1t-nlbndjpuja-uc.a.run.app/";
 
   const host = document.createElement("pinpoint-feedback-root");
   host.dataset.pinpointVersion = chrome.runtime.getManifest().version;

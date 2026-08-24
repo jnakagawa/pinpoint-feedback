@@ -1,6 +1,6 @@
 const ZERO_API = "https://api.zero.xyz";
 const ZERO_SDK_VERSION = "1.33.0";
-const BACKEND_ROOT = "https://pinpoint-feedback.transqualia.chatgpt.site";
+const BACKEND_ROOT = "https://deploy-9po6nd1t-nlbndjpuja-uc.a.run.app";
 
 const storage = {
   async get(keys) {

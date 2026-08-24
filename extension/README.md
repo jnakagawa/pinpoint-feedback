@@ -1,6 +1,6 @@
 # Pinpoint Chrome extension
 
-Pinpoint lets reviewers drop numbered feedback pins directly onto any normal `http` or `https` page. Comments are grouped by the page URL and synchronized through the Pinpoint API after the reviewer signs in with Zero Auth.
+Pinpoint lets reviewers drop numbered feedback pins directly onto any normal `http` or `https` page. Comments are grouped by the page URL and synchronized through the Zero-hosted Pinpoint API. Public reviews work without an account; Zero Auth is used for identity and protected-review controls.
 
 Use **Share** in the in-page toolbar to capture the website's current visible view and copy a Zero-hosted public review link. Anyone with that browser link can see the real captured page and read, comment on, resolve, and reopen feedback without installing the extension or creating a Zero account.
 
@@ -20,4 +20,4 @@ The extension starts Zero's device authorization flow and opens Zero's approval 
 
 ## Local development
 
-The hosted API URL and Zero API version are defined near the top of `background.js`. Reload the extension from `chrome://extensions` after changing any file.
+The Zero-hosted app URL and Zero API version are defined near the top of `background.js`; the public review root is near the top of `content.js`. Reload the extension from `chrome://extensions` after changing any file.

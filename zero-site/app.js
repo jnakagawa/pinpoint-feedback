@@ -1,5 +1,5 @@
 (() => {
-  const API_ROOT = "https://pinpoint-feedback.transqualia.chatgpt.site";
+  const API_ROOT = location.origin;
   const DEFAULT_URL = "https://kanso.studio/";
   const $ = (selector) => document.querySelector(selector);
   const state = { pageUrl: reviewUrl(), comments: [], snapshot: null, snapshotUrl: "", filter: "open", mode: "comment", selectedId: null, draft: null };

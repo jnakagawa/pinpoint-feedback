@@ -21,9 +21,11 @@ test("sharing captures the visible website and the public page renders that capt
   assert.match(page, /No page capture yet/);
   assert.doesNotMatch(page, /We shape quiet ideas|Independent creative studio|className="sample-art"/);
   assert.equal(hosting.r2, "SNAPSHOTS");
-  assert.equal(manifest.version, "0.5.1");
-  assert.match(popup, /v0\.5\.1/);
-  assert.match(content, /https:\/\/cdn\.withzero\.xyz\/EAOjJxtl\/pinpoint-feedback\//);
+  assert.equal(manifest.version, "0.6.0");
+  assert.match(popup, /v0\.6\.0/);
+  assert.match(content, /https:\/\/deploy-9po6nd1t-nlbndjpuja-uc\.a\.run\.app\//);
+  assert.doesNotMatch(content, /chatgpt\.site/);
+  assert.doesNotMatch(background, /chatgpt\.site/);
 });
 
 test("the extension captures the sender tab and uploads the image with page geometry", async () => {
@@ -102,7 +104,7 @@ test("the extension captures the sender tab and uploads the image with page geom
   assert.equal(captureCall.windowId, 17);
   assert.equal(captureCall.options.format, "jpeg");
   assert.equal(captureCall.options.quality, 88);
-  assert.match(uploadCall.url, /^https:\/\/pinpoint-feedback\.transqualia\.chatgpt\.site\/api\/snapshot\?url=/);
+  assert.match(uploadCall.url, /^https:\/\/deploy-9po6nd1t-nlbndjpuja-uc\.a\.run\.app\/api\/snapshot\?url=/);
   assert.equal(uploadCall.method, "POST");
   assert.equal(uploadCall.headers.get("authorization"), "Bearer zero-test-token");
   assert.equal(uploadCall.headers.get("x-page-height"), "3200");

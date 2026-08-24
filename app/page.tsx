@@ -30,7 +30,7 @@ type DraftPoint = {
   viewY: number;
 };
 
-const PUBLIC_SITE_URL = "https://cdn.withzero.xyz/EAOjJxtl/pinpoint-feedback";
+const PUBLIC_SITE_URL = "https://deploy-9po6nd1t-nlbndjpuja-uc.a.run.app";
 const DEFAULT_REVIEW_URL = "https://kanso.studio/";
 
 function formatTime(value: string) {
