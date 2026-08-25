@@ -1,7 +1,33 @@
 (() => {
-  if (window.top !== window || document.querySelector("pinpoint-feedback-root")) return;
-
   const PUBLIC_REVIEW_ROOT = "https://deploy-9po6nd1t-nlbndjpuja-uc.a.run.app/";
+  const PUBLIC_REVIEW_ORIGIN = new URL(PUBLIC_REVIEW_ROOT).origin;
+  const EXTENSION_CHANNEL = "pinpoint-extension-v1";
+
+  if (location.origin === PUBLIC_REVIEW_ORIGIN) {
+    const bridgeSend = (type, payload = {}) => new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type, ...payload }, (response) => {
+        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+        if (!response?.ok) return reject(new Error(response?.error || "Pinpoint could not complete that action."));
+        resolve(response.data);
+      });
+    });
+    addEventListener("message", async (event) => {
+      if (event.source !== window || event.origin !== location.origin || event.data?.channel !== EXTENSION_CHANNEL) return;
+      if (event.data.type === "ping") return postMessage({ channel: EXTENSION_CHANNEL, type: "ready" }, location.origin);
+      if (event.data.type !== "request") return;
+      const { requestId, requestType, payload = {} } = event.data;
+      if (!["COMMENTS_LIST", "COMMENTS_CREATE", "COMMENTS_UPDATE"].includes(requestType)) return;
+      try {
+        const data = await bridgeSend(requestType, payload);
+        postMessage({ channel: EXTENSION_CHANNEL, type: "response", requestId, ok: true, data }, location.origin);
+      } catch (error) {
+        postMessage({ channel: EXTENSION_CHANNEL, type: "response", requestId, ok: false, error: error.message }, location.origin);
+      }
+    });
+    postMessage({ channel: EXTENSION_CHANNEL, type: "ready" }, location.origin);
+  }
+
+  if (window.top !== window || document.querySelector("pinpoint-feedback-root")) return;
 
   const host = document.createElement("pinpoint-feedback-root");
   host.dataset.pinpointVersion = chrome.runtime.getManifest().version;
@@ -76,6 +102,7 @@
     pageUrl: normalizedPageUrl(),
     settings: {},
     access: null,
+    currentCaptureId: null,
   };
 
   function normalizedPageUrl() {
@@ -84,9 +111,10 @@
     return url.toString();
   }
 
-  function publicReviewUrl() {
+  function publicReviewUrl(captureId = state.currentCaptureId) {
     const url = new URL(PUBLIC_REVIEW_ROOT);
     url.searchParams.set("url", state.pageUrl);
+    if (captureId) url.searchParams.set("capture", captureId);
     return url.toString();
   }
 
@@ -114,30 +142,44 @@
   async function shareReview() {
     const shareButton = $(".pp-share-review");
     const originalMarkup = shareButton.innerHTML;
+    let usedExtensionFallback = false;
     try {
       shareButton.disabled = true;
-      shareButton.innerHTML = "<span>◌</span> Capturing…";
-      const { width, height } = pageDimensions();
-      shell.style.visibility = "hidden";
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      await send("SNAPSHOT_CAPTURE", {
-        pageUrl: state.pageUrl,
-        pageTitle: document.title || new URL(state.pageUrl).hostname,
-        metrics: {
-          pageWidth: width,
-          pageHeight: height,
-          viewportWidth: window.innerWidth,
-          viewportHeight: window.innerHeight,
-          scrollX: window.scrollX,
-          scrollY: window.scrollY,
-          devicePixelRatio: window.devicePixelRatio || 1,
-        },
-      });
-      await copyText(publicReviewUrl());
+      shareButton.innerHTML = "<span>◌</span> Publishing on Zero…";
+      let published;
+      try {
+        published = await send("CAPTURE_PUBLISH", {
+          capture: {
+            pageUrl: state.pageUrl,
+            pageTitle: document.title || new URL(state.pageUrl).hostname,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+          },
+        });
+      } catch {
+        usedExtensionFallback = true;
+        shareButton.innerHTML = "<span>◌</span> Capturing private page…";
+        shell.style.visibility = "hidden";
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const capture = await captureFullPageSnapshot((current, total) => {
+          shareButton.innerHTML = `<span>◌</span> Capturing ${current}/${total}…`;
+        });
+        shareButton.innerHTML = "<span>↑</span> Publishing on Zero…";
+        published = await send("SNAPSHOT_UPLOAD", {
+          pageUrl: state.pageUrl,
+          pageTitle: document.title || new URL(state.pageUrl).hostname,
+          dataUrl: capture.dataUrl,
+          metrics: capture.metrics,
+        });
+      }
+      state.currentCaptureId = published.captureId || null;
+      await copyText(publicReviewUrl(state.currentCaptureId));
       const protectedDomain = state.access?.allowedDomain;
       toast(protectedDomain
-        ? `Page captured. Protected link copied — @${protectedDomain} Zero sign-in required.`
-        : "Page captured. Public link copied — guests can collaborate without Zero or the extension.");
+        ? `Revision published. Protected link copied — @${protectedDomain} Zero sign-in required.`
+        : usedExtensionFallback
+          ? "Private-page revision published on Zero. Public link copied."
+          : "Fresh revision captured and published by Zero. Public link copied.");
     } catch (error) {
       toast(error.message, true);
     } finally {
@@ -189,13 +231,230 @@
     };
   }
 
-  function positionPins() {
+  function captureOffsets(total, viewport) {
+    const max = Math.max(0, total - viewport);
+    const offsets = [];
+    for (let value = 0; value < max; value += viewport) offsets.push(value);
+    offsets.push(max);
+    return [...new Set(offsets.map((value) => Math.max(0, Math.round(value))))];
+  }
+
+  function waitForCapturePaint(delay = 180) {
+    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, delay))));
+  }
+
+  function loadCaptureImage(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Pinpoint could not read a captured page segment."));
+      image.src = dataUrl;
+    });
+  }
+
+  function canvasJpeg(canvas, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return reject(new Error("Pinpoint could not assemble the full-page capture."));
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Pinpoint could not prepare the full-page capture."));
+        reader.readAsDataURL(blob);
+      }, "image/jpeg", quality);
+    });
+  }
+
+  async function captureFullPageSnapshot(onProgress = () => {}) {
+    const original = { x: window.scrollX, y: window.scrollY };
+    const root = document.documentElement;
+    const body = document.body;
+    const previous = {
+      rootBehavior: root.style.scrollBehavior,
+      rootSnap: root.style.scrollSnapType,
+      bodyBehavior: body?.style.scrollBehavior || "",
+      bodySnap: body?.style.scrollSnapType || "",
+    };
+    const initial = pageDimensions();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const maxPixels = 24_000_000;
+    const maxDimension = 20_000;
+    const scale = Math.min(
+      1,
+      Math.sqrt(maxPixels / Math.max(1, initial.width * initial.height)),
+      maxDimension / Math.max(initial.width, initial.height),
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(initial.width * scale));
+    canvas.height = Math.max(1, Math.round(initial.height * scale));
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error("Pinpoint could not create a full-page capture.");
+    context.fillStyle = getComputedStyle(root).backgroundColor || "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    const xs = captureOffsets(initial.width, viewportWidth);
+    const ys = captureOffsets(initial.height, viewportHeight);
+    const total = xs.length * ys.length;
+    let current = 0;
+    root.style.scrollBehavior = "auto";
+    root.style.scrollSnapType = "none";
+    if (body) {
+      body.style.scrollBehavior = "auto";
+      body.style.scrollSnapType = "none";
+    }
+
+    try {
+      for (const y of ys) {
+        for (const x of xs) {
+          window.scrollTo(x, y);
+          await waitForCapturePaint(current ? 620 : 220);
+          const actualX = window.scrollX;
+          const actualY = window.scrollY;
+          const result = await send("SNAPSHOT_VIEWPORT");
+          const image = await loadCaptureImage(result.dataUrl);
+          const visibleWidth = Math.min(viewportWidth, initial.width - actualX);
+          const visibleHeight = Math.min(viewportHeight, initial.height - actualY);
+          const sourceWidth = image.naturalWidth * (visibleWidth / viewportWidth);
+          const sourceHeight = image.naturalHeight * (visibleHeight / viewportHeight);
+          context.drawImage(
+            image,
+            0,
+            0,
+            sourceWidth,
+            sourceHeight,
+            actualX * scale,
+            actualY * scale,
+            visibleWidth * scale,
+            visibleHeight * scale,
+          );
+          current += 1;
+          onProgress(current, total);
+        }
+      }
+    } finally {
+      root.style.scrollBehavior = previous.rootBehavior;
+      root.style.scrollSnapType = previous.rootSnap;
+      if (body) {
+        body.style.scrollBehavior = previous.bodyBehavior;
+        body.style.scrollSnapType = previous.bodySnap;
+      }
+      window.scrollTo(original.x, original.y);
+      await waitForCapturePaint(0);
+    }
+
+    return {
+      dataUrl: await canvasJpeg(canvas),
+      metrics: {
+        pageWidth: initial.width,
+        pageHeight: initial.height,
+        viewportWidth: initial.width,
+        viewportHeight: initial.height,
+        scrollX: 0,
+        scrollY: 0,
+        devicePixelRatio: scale,
+      },
+    };
+  }
+
+  function selectorEscape(value) {
+    if (globalThis.CSS?.escape) return CSS.escape(value);
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, (character) => `\\${character}`);
+  }
+
+  function attributeEscape(value) {
+    return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  function elementText(element) {
+    return String(element?.innerText || element?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 180);
+  }
+
+  function stableSelector(element) {
+    if (!(element instanceof Element)) return "";
+    if (element.id) {
+      const selector = `#${selectorEscape(element.id)}`;
+      try { if (document.querySelectorAll(selector).length === 1) return selector; } catch { /* Continue. */ }
+    }
+    for (const name of ["data-testid", "data-test", "name", "aria-label"]) {
+      const value = element.getAttribute(name);
+      if (!value || value.length > 160) continue;
+      const selector = `${element.localName}[${name}="${attributeEscape(value)}"]`;
+      try { if (document.querySelectorAll(selector).length === 1) return selector; } catch { /* Continue. */ }
+    }
+    const parts = [];
+    let current = element;
+    for (let depth = 0; current && current !== document.documentElement && depth < 7; depth += 1) {
+      const tag = current.localName;
+      if (!tag) break;
+      const siblings = current.parentElement ? [...current.parentElement.children].filter((child) => child.localName === tag) : [];
+      const part = siblings.length > 1 ? `${tag}:nth-of-type(${siblings.indexOf(current) + 1})` : tag;
+      parts.unshift(part);
+      const selector = parts.join(" > ");
+      try { if (document.querySelectorAll(selector).length === 1) return selector; } catch { /* Continue. */ }
+      current = current.parentElement;
+    }
+    return parts.join(" > ");
+  }
+
+  function buildDomAnchor(element, clientX, clientY) {
+    if (!(element instanceof Element) || element === host || host.contains(element)) return null;
+    const rect = element.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return {
+      version: 1,
+      selector: stableSelector(element),
+      tag: element.localName || "",
+      text: elementText(element),
+      offsetX: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+      offsetY: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+    };
+  }
+
+  function resolveDomAnchor(anchor) {
+    if (!anchor) return null;
+    let element = null;
+    if (anchor.selector) {
+      try { element = document.querySelector(anchor.selector); } catch { element = null; }
+    }
+    if (!element && anchor.text) {
+      const selector = /^[a-z0-9-]+$/.test(anchor.tag || "") ? anchor.tag : "body *";
+      const wanted = String(anchor.text).replace(/\s+/g, " ").trim();
+      try {
+        element = [...document.querySelectorAll(selector)].slice(0, 1500).find((candidate) => {
+          const text = elementText(candidate);
+          return text === wanted || (wanted.length >= 24 && text.includes(wanted));
+        }) || null;
+      } catch { element = null; }
+    }
+    return element;
+  }
+
+  function commentClientPoint(comment) {
+    const element = resolveDomAnchor(comment.anchor);
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      if (rect.width && rect.height) return {
+        x: rect.left + rect.width * (Number(comment.anchor.offsetX) || 0),
+        y: rect.top + rect.height * (Number(comment.anchor.offsetY) || 0),
+        element,
+      };
+    }
     const { width, height } = pageDimensions();
+    return {
+      x: (comment.x / 100) * width - window.scrollX,
+      y: (comment.y / 100) * height - window.scrollY,
+      element: null,
+    };
+  }
+
+  function positionPins() {
     pinsElement.querySelectorAll(".pp-pin").forEach((pin) => {
       const comment = state.comments.find((item) => String(item.id) === pin.dataset.id);
       if (!comment) return;
-      pin.style.left = `${(comment.x / 100) * width - window.scrollX}px`;
-      pin.style.top = `${(comment.y / 100) * height - window.scrollY}px`;
+      const point = commentClientPoint(comment);
+      pin.style.left = `${point.x}px`;
+      pin.style.top = `${point.y}px`;
+      pin.dataset.anchorMatched = String(Boolean(point.element));
     });
   }
 
@@ -261,8 +520,12 @@
     locate.type = "button";
     locate.textContent = "Locate on page";
     locate.addEventListener("click", () => {
-      const { height } = pageDimensions();
-      window.scrollTo({ top: Math.max(0, (comment.y / 100) * height - window.innerHeight / 2), behavior: "smooth" });
+      const target = resolveDomAnchor(comment.anchor);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      else {
+        const { height } = pageDimensions();
+        window.scrollTo({ top: Math.max(0, (comment.y / 100) * height - window.innerHeight / 2), behavior: "smooth" });
+      }
       const pin = pinsElement.querySelector(`[data-id="${comment.id}"]`);
       pin?.classList.add("is-pulsing");
       setTimeout(() => pin?.classList.remove("is-pulsing"), 1200);
@@ -272,9 +535,55 @@
     resolve.className = "pp-resolve";
     resolve.textContent = comment.status === "resolved" ? "Reopen" : "Resolve";
     resolve.addEventListener("click", () => updateStatus(comment));
-    actions.append(locate, resolve);
+    actions.append(locate);
+    if (comment.canEdit) {
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "pp-edit";
+      edit.textContent = "Edit";
+      edit.addEventListener("click", () => beginCommentEdit(comment, card, body, actions));
+      actions.append(edit);
+    }
+    actions.append(resolve);
     card.append(top, body, actions);
     return card;
+  }
+
+  function beginCommentEdit(comment, card, bodyElement, actions) {
+    bodyElement.hidden = true;
+    actions.hidden = true;
+    const form = document.createElement("form");
+    form.className = "pp-edit-form";
+    const input = document.createElement("textarea");
+    input.maxLength = 800;
+    input.required = true;
+    input.value = comment.body;
+    input.setAttribute("aria-label", "Edit comment");
+    const controls = document.createElement("div");
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.textContent = "Save edit";
+    controls.append(cancel, save);
+    form.append(input, controls);
+    cancel.addEventListener("click", renderPanel);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const body = input.value.trim();
+      if (!body || body === comment.body) return renderPanel();
+      save.disabled = true; save.textContent = "Saving…";
+      try {
+        const result = await send("COMMENTS_UPDATE", { comment: { id: comment.id, body, pageUrl: state.pageUrl } });
+        comment.body = result.comment?.body || body;
+        renderPins(); renderPanel(); toast("Comment updated");
+      } catch (error) {
+        save.disabled = false; save.textContent = "Save edit"; toast(error.message, true);
+      }
+    });
+    card.append(form);
+    requestAnimationFrame(() => { input.focus(); input.setSelectionRange(input.value.length, input.value.length); });
   }
 
   function renderPanel() {
@@ -380,7 +689,7 @@
     state.point = null;
   }
 
-  function openComposer(clientX, clientY) {
+  function openComposer(clientX, clientY, target) {
     if (state.access && !state.access.hasAccess) {
       toast(`Use a Zero account with an @${state.access.allowedDomain} email.`, true);
       return;
@@ -389,6 +698,7 @@
     state.point = {
       x: Math.max(0, Math.min(100, ((clientX + window.scrollX) / width) * 100)),
       y: Math.max(0, Math.min(100, ((clientY + window.scrollY) / height) * 100)),
+      anchor: buildDomAnchor(target, clientX, clientY),
     };
     composer.hidden = false;
     composer.style.left = `${Math.min(Math.max(12, clientX + 18), window.innerWidth - 350)}px`;
@@ -431,7 +741,7 @@
     if (event.composedPath().includes(host)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    openComposer(event.clientX, event.clientY);
+    openComposer(event.clientX, event.clientY, event.target);
   }
 
   function setCommentMode(enabled) {

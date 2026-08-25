@@ -129,11 +129,12 @@ async function signOut() {
   return { ok: true };
 }
 
-async function backendRequest(path, method, payload = null, pageUrl = null, canRefresh = true) {
+async function backendRequest(path, method, payload = null, pageUrl = null, canRefresh = true, query = {}) {
   const { zeroSession } = await storage.get("zeroSession");
   if (!zeroSession?.accessToken) throw new Error("Sign in with Zero first.");
   const url = new URL(path, BACKEND_ROOT);
   if (pageUrl) url.searchParams.set("url", pageUrl);
+  Object.entries(query).forEach(([key, value]) => { if (value) url.searchParams.set(key, value); });
   const response = await fetch(url, {
     method,
     headers: {
@@ -144,7 +145,7 @@ async function backendRequest(path, method, payload = null, pageUrl = null, canR
   });
   if (response.status === 401 && canRefresh && zeroSession.refreshToken) {
     const refreshed = await refreshZeroSession(zeroSession.refreshToken);
-    if (refreshed) return backendRequest(path, method, payload, pageUrl, false);
+    if (refreshed) return backendRequest(path, method, payload, pageUrl, false, query);
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Pinpoint sync failed (${response.status}).`);
@@ -194,6 +195,25 @@ async function captureSnapshot(message, sender) {
   return uploadSnapshot(image, message);
 }
 
+async function captureViewport(sender) {
+  if (!sender.tab || !Number.isInteger(sender.tab.windowId)) {
+    throw new Error("Pinpoint could not identify the page to capture.");
+  }
+  const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, {
+    format: "jpeg",
+    quality: 88,
+  });
+  return { dataUrl };
+}
+
+async function uploadCapturedSnapshot(message) {
+  if (typeof message.dataUrl !== "string" || !message.dataUrl.startsWith("data:image/")) {
+    throw new Error("Pinpoint did not receive a valid full-page capture.");
+  }
+  const image = await fetch(message.dataUrl).then((response) => response.blob());
+  return uploadSnapshot(image, message);
+}
+
 async function handleMessage(message, sender) {
   switch (message.type) {
     case "ZERO_AUTH_START":
@@ -214,7 +234,7 @@ async function handleMessage(message, sender) {
       return { settings: next };
     }
     case "COMMENTS_LIST":
-      return backendRequest("/api/comments", "GET", null, message.pageUrl);
+      return backendRequest("/api/comments", "GET", null, message.pageUrl, true, { capture: message.captureId });
     case "COMMENTS_CREATE":
       return backendRequest("/api/comments", "POST", message.comment);
     case "COMMENTS_UPDATE":
@@ -223,8 +243,14 @@ async function handleMessage(message, sender) {
       return backendRequest("/api/access", "GET", null, message.pageUrl);
     case "ACCESS_UPDATE":
       return backendRequest("/api/access", "PUT", message.access);
+    case "CAPTURE_PUBLISH":
+      return backendRequest("/api/captures", "POST", message.capture);
     case "SNAPSHOT_CAPTURE":
       return captureSnapshot(message, sender);
+    case "SNAPSHOT_VIEWPORT":
+      return captureViewport(sender);
+    case "SNAPSHOT_UPLOAD":
+      return uploadCapturedSnapshot(message);
     default:
       throw new Error("Unknown Pinpoint request.");
   }

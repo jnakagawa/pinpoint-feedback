@@ -1,0 +1,77 @@
+.review-canvas {
+  height: min(68vh, 700px);
+  min-height: 440px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+.review-canvas.archive-mode {
+  overflow: hidden;
+  background: #fff;
+}
+
+.archive-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 440px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.review-archive {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.artifact-badge {
+  justify-self: start;
+  padding: 5px 8px;
+  border: 1px solid #b8d86b;
+  border-radius: 999px;
+  background: #edffc0;
+  color: #3d4a1f;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+
+.artifact-badge.fallback {
+  border-color: #dfc38b;
+  background: #fff3d8;
+  color: #6a4c15;
+}
+
+.capture-surface {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  overflow: hidden;
+  background: #eef0eb;
+}
+
+.capture-surface.comment-cursor {
+  cursor: crosshair;
+}
+
+.pin.locating {
+  animation: pinpoint-pulse 0.65s ease-in-out 2;
+}
+
+@keyframes pinpoint-pulse {
+  50% { transform: rotate(-45deg) scale(1.55); filter: brightness(1.2); }
+}
+
+@media (max-width: 700px) {
+  .review-canvas { height: min(72vh, 620px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-canvas { scroll-behavior: auto; }
+  .pin.locating { animation: none; }
+}

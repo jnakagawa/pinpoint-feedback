@@ -1,0 +1,73 @@
+.canvas-wrap {
+  padding-right: 18px;
+  padding-bottom: 32px;
+  padding-left: 18px;
+}
+
+.browser-frame {
+  width: 100%;
+  max-width: none;
+  margin-right: 0;
+  margin-left: 0;
+}
+
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.comment-actions [data-action="edit"] {
+  color: #555951;
+}
+
+.comment-edit-form {
+  margin-top: 9px;
+}
+
+.comment-edit-form textarea {
+  width: 100%;
+  min-height: 78px;
+  padding: 9px;
+  resize: vertical;
+  border: 1px solid #dcd8ff;
+  border-radius: 8px;
+  outline: 0;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.comment-edit-form textarea:focus {
+  box-shadow: 0 0 0 3px rgba(109, 93, 252, .1);
+}
+
+.comment-edit-form > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 7px;
+}
+
+.comment-edit-form button[type="submit"] {
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--ink);
+  color: #fff;
+}
+
+@media (max-width: 1050px) {
+  .canvas-wrap {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+}
+
+@media (max-width: 700px) {
+  .canvas-wrap {
+    padding-right: 10px;
+    padding-bottom: 32px;
+    padding-left: 10px;
+  }
+}

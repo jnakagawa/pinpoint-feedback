@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pinpoint — Visual Website Feedback",
-  "version": "0.6.0",
+  "version": "0.10.0",
   "description": "Drop contextual website feedback and share collaborative review links powered by Zero Auth.",
   "permissions": ["activeTab", "storage", "tabs"],
   "host_permissions": [

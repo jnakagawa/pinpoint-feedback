@@ -150,3 +150,55 @@
 .pp-access-actions .pp-access-remove {
   color: #a4453e;
 }
+
+.pp-card-actions .pp-edit {
+  color: #51554d;
+}
+
+.pp-edit-form {
+  margin-top: 11px;
+  padding-top: 9px;
+  border-top: 1px solid #efefe9;
+}
+
+.pp-edit-form textarea {
+  width: 100%;
+  min-height: 78px;
+  padding: 9px;
+  resize: vertical;
+  border: 1px solid #dcd8ff;
+  border-radius: 9px;
+  outline: 0;
+  background: white;
+  color: var(--pp-ink);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.pp-edit-form textarea:focus {
+  box-shadow: 0 0 0 3px rgba(109, 93, 252, .1);
+}
+
+.pp-edit-form > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.pp-edit-form button {
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: #ededE8;
+  color: #777b72;
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pp-edit-form button[type="submit"] {
+  background: var(--pp-ink);
+  color: white;
+}

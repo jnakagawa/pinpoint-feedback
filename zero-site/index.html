@@ -6,6 +6,8 @@
   <meta name="description" content="Collaborative visual website feedback powered by Zero Auth.">
   <title>Pinpoint — visual website feedback</title>
   <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./scroll.css">
+  <link rel="stylesheet" href="./full-width.css">
 </head>
 <body>
   <main class="review-shell">
@@ -29,10 +31,10 @@
       </nav>
 
       <div class="canvas-wrap">
-        <div class="mode-pill"><span>●</span><b id="mode-copy">Loading page capture…</b></div>
+        <div class="mode-pill"><span>●</span><b id="mode-copy">Loading website revision…</b></div>
         <article class="browser-frame" aria-label="Website under review">
           <div class="browser-bar">
-            <div class="traffic"><i></i><i></i><i></i></div>
+            <div id="artifact-badge" class="artifact-badge">LOADING</div>
             <form id="address-form" class="address">
               <label class="sr-only" for="review-url">Website URL</label>
               <input id="review-url" aria-label="Website URL">
@@ -40,13 +42,18 @@
             </form>
             <a id="open-original" class="open-icon" target="_blank" rel="noreferrer" aria-label="Open original website">↗</a>
           </div>
-          <div id="review-canvas" class="review-canvas" role="button" tabindex="0" aria-label="Captured website">
+          <div id="review-canvas" class="review-canvas" aria-label="Scrollable website revision">
             <div id="snapshot-empty" class="snapshot-empty">
               <span>↗</span><strong>Loading this review…</strong><p></p>
             </div>
-            <img id="review-snapshot" class="review-snapshot" alt="" draggable="false" hidden>
-            <div id="site-label" class="site-label" hidden>Captured from <strong></strong></div>
-            <div id="pins"></div>
+            <div id="archive-surface" class="archive-surface" hidden>
+              <iframe id="review-archive" class="review-archive" title="Interactive archived website" sandbox="allow-scripts"></iframe>
+            </div>
+            <div id="capture-surface" class="capture-surface" role="button" tabindex="0" aria-label="Image fallback of the website. Scroll to review the full page." hidden>
+              <img id="review-snapshot" class="review-snapshot" alt="" draggable="false">
+              <div id="site-label" class="site-label">Image fallback from <strong></strong></div>
+              <div id="pins"></div>
+            </div>
           </div>
         </article>
         <p id="canvas-note" class="canvas-note"></p>
