@@ -6,6 +6,12 @@ The production app, API, PostgreSQL data, and public review pages are hosted by 
 
 Comment authors can edit their own feedback through the signed-in extension. Public visitors can still read, add, resolve, and reopen feedback without installing Pinpoint or creating an account.
 
+## Install the Chrome extension
+
+[Download Pinpoint v0.10.0](https://github.com/jnakagawa/pinpoint-feedback/releases/download/v0.10.0/pinpoint-chrome-extension-v0.10.0.zip), extract the ZIP, then open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select the extracted folder.
+
+The release ZIP has SHA-256 `1e19cab5dabc77e054d21bcc47cbda871bbc81c0a27e01da43301c4a394c68e6`.
+
 ## Project layout
 
 - `extension/`: unpacked Chrome extension source
